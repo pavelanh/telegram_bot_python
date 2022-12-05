@@ -1,7 +1,10 @@
 import logging
+import threading
+import time
 
 import requests as requests
 from flask import Flask, request, Response
+from flask.scaffold import setupmethod
 from jproperties import Properties
 
 import driver
@@ -18,6 +21,17 @@ def get_property(prop):
 
 
 TOKEN = get_property('TOKEN')
+
+
+def ngrok_run():
+    import subprocess
+    import sys
+    import os
+    logging.info('starting ngrok..')
+    subprocess.Popen(["powershell.exe",
+                      f"{os.getcwd()}/ngrok_run.ps1"],
+                     stdout=sys.stdout)
+    time.sleep(10)
 
 
 def setup_webhook():
@@ -99,6 +113,17 @@ def tel_send_poll(chat_id):
     return requests.post(url, json=payload)
 
 
+@setupmethod
+def activate_job():
+    def run_job():
+        while True:
+            logging.info("Run recurring task")
+            time.sleep(3)
+
+    thread = threading.Thread(target=run_job)
+    thread.start()
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -131,7 +156,29 @@ def index():
         return '<h1>Welcome!</h1>'
 
 
+def start_runner():
+    def start_loop():
+        not_started = True
+        while not_started:
+            logging.info('In start loop')
+            try:
+                ngrok_run()
+                setup_webhook()
+                r = requests.get('http://127.0.0.1:5000/')
+                if r.status_code == 200:
+                    logging.info('Server started, quiting start_loop')
+                    not_started = False
+                logging.info(r.status_code)
+            except:
+                logging.info('Server not yet started')
+            time.sleep(2)
+
+    logging.info('Started runner')
+    thread = threading.Thread(target=start_loop)
+    thread.start()
+
+
 if __name__ == '__main__':
     logger.setup_logging()
-    setup_webhook()
+    start_runner()
     app.run(debug=True, use_reloader=True)
